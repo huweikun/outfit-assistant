@@ -169,6 +169,7 @@ body {
   border-radius: 12px; font-size: .85rem; cursor: pointer; position: relative;
 }
 .cal-cell.today { background: var(--accent); color: #fff; font-weight: 600; }
+.cal-cell.selected { background: #f0e8dc; font-weight: 600; }
 .cal-cell.has-outfit::after { content: ''; position: absolute; bottom: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent2); }
 .cal-cell.today.has-outfit::after { background: #fff; }
 .cal-cell.other { color: #ccc; }
@@ -297,7 +298,7 @@ body {
     <div class="photo-capture" id="photoCapture" onclick="document.getElementById('photoInput').click()">
       <div class="hint"><span class="icon">📸</span>点击拍照或上传照片</div>
     </div>
-    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
+    <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhoto(event)">
 
     <div style="margin-top:16px">
       <div class="form-group">
@@ -471,6 +472,25 @@ function showToast(msg) {
   t._timeout = setTimeout(() => t.classList.remove('show'), 2000);
 }
 
+function showConfirm(msg, onConfirm) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay show';
+  overlay.innerHTML = `
+    <div class="modal-sheet" style="text-align:center">
+      <div class="modal-handle"></div>
+      <p style="font-size:1rem;margin-bottom:20px;padding:0 8px">${msg}</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" style="flex:1" id="confirmNo">取消</button>
+        <button class="btn btn-primary" style="flex:1" id="confirmYes">确定</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#confirmYes').onclick = () => { overlay.remove(); onConfirm(); };
+  overlay.querySelector('#confirmNo').onclick = () => { overlay.remove(); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
 function getCurrentSeason() {
   const m = new Date().getMonth() + 1;
   if (m >= 3 && m <= 5) return 'spring';
@@ -632,6 +652,7 @@ function generateOutfit() {
 }
 
 let currentOutfit = [];
+let isSavingOutfit = false;
 
 function renderOutfitDisplay(items) {
   const container = document.getElementById('outfitDisplay');
@@ -655,6 +676,9 @@ function renderOutfitDisplay(items) {
 
 function saveTodayOutfit() {
   if (currentOutfit.length === 0) { showToast('请先生成一套穿搭'); return; }
+  if (isSavingOutfit) return;
+  isSavingOutfit = true;
+
   const db = getDB();
   const outfit = {
     id: Date.now().toString(),
@@ -674,11 +698,23 @@ function saveTodayOutfit() {
   });
 
   saveDB(db);
-  showToast('已记录今日穿搭！');
+
+  // Update UI to reflect saved state
+  const display = document.getElementById('outfitDisplay');
+  const savedBadge = document.createElement('div');
+  savedBadge.style.cssText = 'text-align:center;padding:12px;color:#7ba882;font-weight:600;font-size:.9rem';
+  savedBadge.textContent = '今日穿搭已记录';
+  display.appendChild(savedBadge);
+
+  document.querySelector('#screen-today .action-bar').innerHTML = `
+    <button class="btn btn-outline btn-sm" onclick="generateOutfit(); resetSaveState();" style="flex:1">换一套</button>
+  `;
+
+  showToast('今日穿搭已记录！');
 
   // Ask if want to save as favorite
   setTimeout(() => {
-    if (confirm('要把这套搭配加入收藏吗？')) {
+    showConfirm('要把这套搭配加入收藏吗？', () => {
       const db2 = getDB();
       db2.favorites.push({
         id: outfit.id,
@@ -687,9 +723,17 @@ function saveTodayOutfit() {
         scene: outfit.scene,
       });
       saveDB(db2);
-      showToast('已加入收藏 💝');
-    }
+      showToast('已加入收藏');
+    });
   }, 500);
+}
+
+function resetSaveState() {
+  isSavingOutfit = false;
+  document.querySelector('#screen-today .action-bar').innerHTML = `
+    <button class="btn btn-primary" onclick="generateOutfit()" style="flex:1">换一套</button>
+    <button class="btn btn-outline" onclick="saveTodayOutfit()">今天就穿这套</button>
+  `;
 }
 
 // ═══════════════════════════════════════
@@ -766,13 +810,13 @@ function showItemDetail(id) {
   };
   overlay.querySelector('#deleteItemBtn').onclick = () => {
     overlay.remove();
-    if (confirm('确定要删除这件衣服吗？')) {
+    showConfirm('确定要删除这件衣服吗？', () => {
       const db = getDB();
       db.items = db.items.filter(i => i.id !== id);
       saveDB(db);
       renderWardrobe();
       showToast('已删除');
-    }
+    });
   };
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
@@ -1036,12 +1080,13 @@ function renderCalOutfitDetail() {
 }
 
 function deleteOutfit(id) {
-  if (!confirm('确定删除这条穿搭记录？')) return;
-  const db = getDB();
-  db.outfits = db.outfits.filter(o => o.id !== id);
-  saveDB(db);
-  renderCalendar();
-  showToast('已删除');
+  showConfirm('确定删除这条穿搭记录？', () => {
+    const db = getDB();
+    db.outfits = db.outfits.filter(o => o.id !== id);
+    saveDB(db);
+    renderCalendar();
+    showToast('已删除');
+  });
 }
 
 function calPrevMonth() {
