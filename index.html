@@ -239,6 +239,42 @@ body {
 .outfit-full { margin: 0 16px; }
 .outfit-full .outfit-item { max-width: 100%; margin-bottom: 8px; }
 
+/* Lookbook collage layout */
+.lookbook { margin: 0 16px 12px; }
+.lookbook-body {
+  position: relative; width: 100%; max-width: 280px; margin: 0 auto;
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  background: #fafafa;
+}
+.lookbook-body img { width: 100%; display: block; }
+.lookbook-body .placeholder {
+  aspect-ratio: 2/3; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; color: var(--sub);
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  cursor: pointer; transition: border-color .2s;
+}
+.lookbook-body .placeholder:active { border-color: var(--accent); }
+.lookbook-body .placeholder .icon { font-size: 3rem; margin-bottom: 8px; }
+.lookbook-body .placeholder p { font-size: .82rem; }
+.lookbook-body .body-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,.5));
+  color: #fff; padding: 24px 12px 10px; font-size: .78rem;
+  text-align: center;
+}
+.outfit-thumbs {
+  display: flex; gap: 8px; overflow-x: auto; padding: 12px 0 4px;
+  justify-content: center; -webkit-overflow-scrolling: touch;
+}
+.outfit-thumb {
+  flex-shrink: 0; width: 72px; text-align: center;
+}
+.outfit-thumb img {
+  width: 72px; height: 96px; object-fit: cover; border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+.outfit-thumb .cat { font-size: .65rem; color: var(--sub); margin-top: 2px; }
+
 .hidden { display: none !important; }
 </style>
 </head>
@@ -264,8 +300,13 @@ body {
     <span class="scene-chip" data-scene="party">聚会</span>
   </div>
 
+  <div class="sec-title">我的形象</div>
+  <div class="lookbook" id="lookbookBody">
+    <input type="file" id="bodyPhotoInput" accept="image/*" style="display:none" onchange="handleBodyPhoto(event)">
+  </div>
+
   <div class="sec-title">今日推荐</div>
-  <div class="outfit-display" id="outfitDisplay"></div>
+  <div class="outfit-thumbs" id="outfitDisplay"></div>
   <div class="action-bar">
     <button class="btn btn-primary" onclick="generateOutfit()" style="flex:1">🔄 换一套</button>
     <button class="btn btn-outline" onclick="saveTodayOutfit()">✅ 今天就穿这套</button>
@@ -447,8 +488,8 @@ const STORAGE_KEY = 'outfit_db';
 function loadDB() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { items:[], outfits:[], favorites:[] };
-  } catch(e) { return { items:[], outfits:[], favorites:[] }; }
+    return raw ? JSON.parse(raw) : { items:[], outfits:[], favorites:[], bodyPhoto:null };
+  } catch(e) { return { items:[], outfits:[], favorites:[], bodyPhoto:null }; }
 }
 
 function saveDB(db) {
@@ -526,7 +567,7 @@ function switchTab(tab, data) {
   document.querySelector(`.nav-item[data-screen="${tab}"]`).classList.add('active');
   document.getElementById('headerTitle').textContent = titles[tab];
 
-  if (tab === 'today') { renderToday(); renderSceneSelector(); }
+  if (tab === 'today') { renderBodyPhoto(); renderToday(); renderSceneSelector(); }
   if (tab === 'wardrobe') renderWardrobe();
   if (tab === 'add') { if (data) fillEditForm(data); else resetAddForm(); }
   if (tab === 'calendar') renderCalendar();
@@ -648,6 +689,7 @@ function generateOutfit() {
   if (shoes.length > 0) outfit.push(shoes[0]);
 
   currentOutfit = outfit;
+  renderBodyPhoto();
   renderOutfitDisplay(outfit);
 }
 
@@ -656,22 +698,67 @@ let isSavingOutfit = false;
 
 function renderOutfitDisplay(items) {
   const container = document.getElementById('outfitDisplay');
+  const cats = { top:'上衣', bottom:'下装', dress:'连衣裙', outer:'外套', shoe:'鞋子', acc:'配饰' };
   if (items.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="icon">👗</div><p>衣橱里还没有适合这个场景的衣服</p><p style="font-size:.78rem;margin-top:4px">先去添加一些衣服吧</p></div>`;
+    container.innerHTML = '';
     return;
   }
-  const cats = { top:'上衣', bottom:'下装', dress:'连衣裙', outer:'外套', shoe:'鞋子', acc:'配饰' };
-  container.innerHTML = `
-    <div class="outfit-row">
-      ${items.map(item => `
-        <div class="outfit-item">
-          <div class="cat-badge">${cats[item.category] || item.category}</div>
-          <img src="${item.photo}" alt="${item.name || ''}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23f0ebe3%22 width=%22100%22 height=%22100%22/><text y=%22.55em%22 x=%2250%22 text-anchor=%22middle%22 font-size=%2230%22>👗</text></svg>'">
-          <div class="label">${item.name || cats[item.category]}</div>
-        </div>
-      `).join('')}
+  container.innerHTML = items.map(item => `
+    <div class="outfit-thumb">
+      <img src="${item.photo}" alt="${item.name||''}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23f0ebe3%22 width=%22100%22 height=%22100%22/><text y=%22.55em%22 x=%2250%22 text-anchor=%22middle%22 font-size=%2230%22>👗</text></svg>'">
+      <div class="cat">${cats[item.category] || item.category}</div>
     </div>
-  `;
+  `).join('');
+}
+
+function renderBodyPhoto() {
+  const db = getDB();
+  const container = document.getElementById('lookbookBody');
+  if (db.bodyPhoto) {
+    container.innerHTML = `
+      <div class="lookbook-body">
+        <img src="${db.bodyPhoto}" alt="我的形象照">
+        <div class="body-label">我的形象 · 点击更换</div>
+      </div>
+    `;
+    container.querySelector('.lookbook-body').onclick = () => document.getElementById('bodyPhotoInput').click();
+  } else {
+    container.innerHTML = `
+      <div class="lookbook-body">
+        <div class="placeholder" onclick="document.getElementById('bodyPhotoInput').click()">
+          <span class="icon">🧍‍♀️</span>
+          <p>点击上传全身照</p>
+          <p style="font-size:.7rem;margin-top:2px;color:#bbb">对着镜子拍一张，穿搭效果一目了然</p>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function handleBodyPhoto(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxW = 600;
+      const scale = Math.min(1, maxW / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const db = getDB();
+      db.bodyPhoto = canvas.toDataURL('image/jpeg', 0.7);
+      saveDB(db);
+      renderBodyPhoto();
+      showToast('形象照已保存');
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
 }
 
 function saveTodayOutfit() {
@@ -1174,6 +1261,7 @@ function wearFavorite(idx) {
   switchTab('today');
   const items = fav.items.map(id => db.items.find(i => i.id === id)).filter(Boolean);
   currentOutfit = items;
+  renderBodyPhoto();
   renderOutfitDisplay(items);
 }
 
@@ -1190,6 +1278,7 @@ function init() {
 
   // Render initial state
   renderChips();
+  renderBodyPhoto();
   renderToday();
   renderSceneSelector();
 
@@ -1202,6 +1291,7 @@ function init() {
 
 function renderToday() {
   const db = getDB();
+  renderBodyPhoto();
   // Check if we already have today's outfit
   const todayOutfit = db.outfits.find(o => o.date === todayStr());
   if (todayOutfit) {

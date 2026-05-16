@@ -1,4 +1,4 @@
-const CACHE = 'outfit-v2';
+const CACHE = 'outfit-v3';
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(
